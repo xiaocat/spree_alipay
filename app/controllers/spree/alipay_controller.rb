@@ -1,6 +1,6 @@
 module Spree
   class AlipayController < StoreController
-    ssl_allowed
+    # ssl_allowed
     skip_before_filter :verify_authenticity_token
 
     def alipay_timestamp # :nodoc: all

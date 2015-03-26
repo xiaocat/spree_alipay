@@ -59,7 +59,7 @@ module Spree
 
       request_valid = Timeout::timeout(10){ HTTParty.get("https://mapi.alipay.com/gateway.do?service=notify_verify&partner=#{payment_method.preferences[:pid]}&notify_id=#{params[:notify_id]}") }
 
-      unless request_valid && params[:total_fee] == order.total
+      unless request_valid && params[:total_fee] == order.total.to_s
         failure_return order
         return
       end

@@ -1,6 +1,6 @@
 module Spree
   class AlipayController < StoreController
-    ssl_allowed
+    # ssl_allowed
     skip_before_filter :verify_authenticity_token
 
     def alipay_timestamp # :nodoc: all
@@ -59,12 +59,12 @@ module Spree
 
       request_valid = Timeout::timeout(10){ HTTParty.get("https://mapi.alipay.com/gateway.do?service=notify_verify&partner=#{payment_method.preferences[:pid]}&notify_id=#{params[:notify_id]}") }
 
-      unless request_valid && params[:total_fee] == order.total
+      unless request_valid && params[:total_fee] == order.total.to_s
         failure_return order
         return
       end
 
-      # unless params['sign'].downcase == Digest::MD5.hexdigest(params.except(*%w[controller action id sign_type sign source payment_method_id]).sort.map{|k,v| "#{k}=#{CGI.unescape(v.to_s)}" }.join("&")+ payment_method.preferences[:key])
+      # unless params['sign'].downcase == Digest::MD5.hexdigest(params.except(*%w[id sign_type sign source payment_method_id]).sort.map{|k,v| "#{k}=#{CGI.unescape(v.to_s)}" }.join("&")+ payment_method.preferences[:key])
       #   failure_return order
       #   return
       # end

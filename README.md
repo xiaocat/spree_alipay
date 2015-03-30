@@ -19,6 +19,12 @@ bundle
 bundle exec rails g spree_alipay:install
 ```
 
+Add this extension to your spree.rb with this line:
+
+```ruby
+Rails.application.config.spree.payment_methods << Spree::Gateway::Alipay
+```
+
 Testing
 -------
 

@@ -4,6 +4,7 @@ module Spree
     preference :email, :string
     preference :key, :string
     preference :iconUrl, :string
+    preference :returnHost, :string
 
     def supports?(source)
       true

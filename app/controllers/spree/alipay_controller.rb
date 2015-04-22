@@ -1,13 +1,12 @@
 module Spree
   class AlipayController < StoreController
-    # ssl_allowed
     skip_before_filter :verify_authenticity_token
 
-    def alipay_timestamp # :nodoc: all
+    def alipay_timestamp
       Timeout::timeout(10){ HTTParty.get(alipay_url('service' => 'query_timestamp')) }['alipay']['response']['timestamp']['encrypt_key']
     end
 
-    def alipay_url(options) # :nodoc: all
+    def alipay_url(options)
       options.merge!({
         'seller_email' => payment_method.preferences[:email],
         'partner' => payment_method.preferences[:pid],
@@ -25,28 +24,37 @@ module Spree
       "#{action}?#{options.sort.map{|k, v| "#{CGI::escape(k.to_s)}=#{CGI::escape(v.to_s)}" }.join('&')}"
     end
 
-    def checkout
-      order = current_order || raise(ActiveRecord::RecordNotFound)
+    def pay_options(order)
+      return_host = payment_method.preferences[:returnHost].blank? ? request.url.sub(request.fullpath, '') : payment_method.preferences[:returnHost]
+      show_url = params[:redirect_url].blank? ? (request.url.sub(request.fullpath, '') + '/products/' + order.products[0].slug) : params[:redirect_url]
 
       options = {
-        'subject' => "#{order.line_items[0].product.name}等#{order.line_items.count}件",
-        'body' => "#{order.number}",
-        'out_trade_no' => order.number,
-        'service' => 'create_direct_pay_by_user',
-        'total_fee' => order.total,
-        'show_url' => request.url.sub(request.fullpath, '') + '/products/' + order.products[0].slug,
-        'return_url' => request.url.sub(request.fullpath, '') + '/alipay/notify?id=' + order.id.to_s + '&payment_method_id=' + params[:payment_method_id].to_s,
-        'notify_url' => request.url.sub(request.fullpath, '') + '/alipay/notify?source=notify&id=' + order.id.to_s + '&payment_method_id=' + params[:payment_method_id].to_s,
-        'payment_type' => '1',
-        'anti_phishing_key' => alipay_timestamp,
-        'sign_id_ext' => order.user.id,
-        'sign_name_ext' => order.user.email,
-        'exter_invoke_ip' => request.remote_ip
+          'subject' => "#{order.line_items[0].product.name}等#{order.line_items.count}件",
+          'body' => "#{order.number}",
+          'out_trade_no' => order.number,
+          'service' => 'create_direct_pay_by_user',
+          'total_fee' => order.total,
+          'show_url' => show_url,
+          'return_url' => return_host + '/alipay/notify?id=' + order.id.to_s + '&payment_method_id=' + params[:payment_method_id].to_s,
+          'notify_url' => return_host + '/alipay/notify?source=notify&id=' + order.id.to_s + '&payment_method_id=' + params[:payment_method_id].to_s,
+          'payment_type' => '1',
+          'anti_phishing_key' => alipay_timestamp,
+          'sign_id_ext' => order.user.id,
+          'sign_name_ext' => order.user.email,
+          'exter_invoke_ip' => request.remote_ip
       }
 
       url = alipay_url(options)
-      # render json:  { 'url' => url , 'options' => options}
-      render json:  { 'url' => url }
+    end
+
+    def checkout
+      order = current_order || raise(ActiveRecord::RecordNotFound)
+      render json:  { 'url' => self.pay_options(order) }
+    end
+
+    def checkout_api
+      order = Spree::Order.find(params[:id])  || raise(ActiveRecord::RecordNotFound)
+      render json:  { 'url' => self.pay_options(order) }
     end
 
     def notify
@@ -87,6 +95,49 @@ module Spree
         success_return order
       else
         failure_return order
+      end
+    end
+
+    def query
+      order = Spree::Order.find(params[:id]) || raise(ActiveRecord::RecordNotFound)
+
+      if order.complete?
+        render :text => "success", :layout => false
+        return
+      end
+
+      r = begin
+        Timeout::timeout(10) do
+          r = HTTParty.get(alipay_url('out_trade_no' => order.number, 'service' => 'single_trade_query'))
+          Rails.logger.info "alipay_query #{r.inspect}"
+          r
+        end
+      rescue Exception => e
+        Rails.logger.info "alipay_query_exception #{r.inspect}"
+        false
+      end
+
+      if r && r['alipay'] && r['alipay']['response'] && r['alipay']['response']['trade'] && %w[TRADE_FINISHED TRADE_SUCCESS].include?(r['alipay']['response']['trade']['trade_status']) && r['alipay']['is_success'] == 'T' && r['alipay']['sign'] == Digest::MD5.hexdigest(r['alipay']['response']['trade'].sort.map{|k,v|"#{k}=#{v}"}.join("&") + payment_method.preferences[:key])
+        order.payments.create!({
+          :source => Spree::AlipayNotify.create({
+            :out_trade_no => r['alipay']['response']['trade']['out_trade_no'],
+            :trade_no => r['alipay']['response']['trade']['trade_no'],
+            :seller_email => r['alipay']['response']['trade']['seller_email'],
+            :buyer_email => r['alipay']['response']['trade']['buyer_email'],
+            :total_fee => r['alipay']['response']['trade']['total_fee'],
+            :source_data => r['alipay']['response']['trade'].to_json
+          }),
+          :amount => order.total,
+          :payment_method => payment_method
+        })
+        order.next
+        if order.complete?
+          render :text => "success", :layout => false
+        else
+          render :text => "failure", :layout => false
+        end
+      else
+        render :text => "failure", :layout => false
       end
     end
 

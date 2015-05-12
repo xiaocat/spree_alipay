@@ -29,7 +29,7 @@ module Spree
       show_url = params[:redirect_url].blank? ? (request.url.sub(request.fullpath, '') + '/products/' + order.products[0].slug) : params[:redirect_url]
 
       options = {
-          'subject' => "#{order.line_items[0].product.name}等#{order.line_items.count}件",
+          'subject' => "#{order.line_items[0].product.name.slice(0,30)}等#{order.line_items.count}件",
           'body' => "#{order.number}",
           'out_trade_no' => order.number,
           'service' => 'create_direct_pay_by_user',

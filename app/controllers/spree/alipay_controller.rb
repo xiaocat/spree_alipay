@@ -39,8 +39,8 @@ module Spree
           'notify_url' => return_host + '/alipay/notify?source=notify&id=' + order.id.to_s + '&payment_method_id=' + params[:payment_method_id].to_s,
           'payment_type' => '1',
           'anti_phishing_key' => alipay_timestamp,
-          'sign_id_ext' => order.user.id,
-          'sign_name_ext' => order.user.email,
+          'sign_id_ext' => order.user.blank? ? '' : order.user.id,
+          'sign_name_ext' => order.email,
           'exter_invoke_ip' => request.remote_ip
       }
 

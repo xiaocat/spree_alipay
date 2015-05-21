@@ -40,7 +40,7 @@ module Spree
           'payment_type' => '1',
           'anti_phishing_key' => alipay_timestamp,
           'sign_id_ext' => order.user.blank? ? 'no_user_id' : order.user.id,
-          'sign_name_ext' => order.email,
+          'sign_name_ext' => order.email.blank? ? (order.phone.blank? ? 'no_user_detail' : order.phone ) : order.email,
           'exter_invoke_ip' => request.remote_ip
       }
 
